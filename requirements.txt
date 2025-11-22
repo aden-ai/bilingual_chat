@@ -1,0 +1,16 @@
+streamlit
+pandas
+numpy
+sentence-transformers
+faiss-cpu
+tqdm
+langdetect
+ollama
+streamlit>=1.26.0
+pandas>=2.0.0
+numpy>=1.25.0
+sentence-transformers>=2.2.2
+faiss-cpu>=1.7.4
+tqdm>=4.66.0
+langdetect>=1.0.9
+googletrans==4.0.0-rc1

@@ -3,5 +3,4 @@ index_meta.pkl
 __pycache__/
 *.pyc
 
-# Data files
-*.csv
+data/*.csv

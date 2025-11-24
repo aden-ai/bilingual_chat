@@ -1,6 +1,5 @@
 faiss_index.bin
 index_meta.pkl
-.evn
 __pycache__/
 *.pyc
 

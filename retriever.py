@@ -14,14 +14,15 @@ class Retriever:
     def __init__(self, csv_path="data/updated_data.csv", force_rebuild=False):
         self.csv_path = csv_path
         self.model = SentenceTransformer(EMBED_MODEL)
-        self.index = None
-        self.meta = None
+
+        # Load CSV once
+        self.df = pd.read_csv(self.csv_path, encoding="utf-8")
+        self.df.fillna("", inplace=True)
 
         index_exists = os.path.exists(INDEX_PATH)
         meta_exists = os.path.exists(META_PATH)
-        index_not_empty = index_exists and os.path.getsize(INDEX_PATH) > 0
 
-        if force_rebuild or not index_exists or not meta_exists or not index_not_empty:
+        if force_rebuild or not index_exists or not meta_exists:
             print("⚠️ FAISS index missing or empty — rebuilding...")
             self._build_index()
         else:
@@ -34,48 +35,69 @@ class Retriever:
             self.meta = pickle.load(f)
 
     def _build_index(self):
-        # Explicitly specify encoding to avoid decode errors
-        df = pd.read_csv(self.csv_path, encoding="utf-8")
-        df.fillna("", inplace=True)
-
-        # Combine relevant columns into text passages
         docs = []
-        for _, row in df.iterrows():
-            text = " || ".join([
-                str(row.get("scheme_name", "")),
-                str(row.get("details", "")),
-                str(row.get("benefits", "")),
-                str(row.get("eligibility", "")),
-                str(row.get("schemeCategory", "")),
-                str(row.get("tags", ""))
-            ])
-            docs.append(text)
+
+        for _, row in self.df.iterrows():
+
+            scheme_name = str(row.get("scheme_name", "")).strip()
+            details = str(row.get("details", "")).strip()
+            benefits = str(row.get("benefits", "")).strip()
+            elig = str(row.get("eligibility", "")).strip()
+            tags = str(row.get("tags", "")).strip()
+
+            # BOOST scheme name heavily ×5
+            # BOOST tags ×3
+            combined_text = (
+                (scheme_name + " ") * 5 +
+                (tags + " ") * 3 +
+                details + " " +
+                benefits + " " +
+                elig
+            )
+
+            docs.append(combined_text)
 
         embeddings = self.model.encode(docs, show_progress_bar=True, convert_to_numpy=True)
+
         d = embeddings.shape[1]
-        index = faiss.IndexFlatIP(d)
         faiss.normalize_L2(embeddings)
+
+        index = faiss.IndexFlatIP(d)
         index.add(embeddings)
 
         self.index = index
-        self.meta = {"csv_path": self.csv_path, "docs": docs}
+        self.meta = {"docs": docs}
+
         faiss.write_index(self.index, INDEX_PATH)
         with open(META_PATH, "wb") as f:
             pickle.dump(self.meta, f)
 
-    def search(self, query, top_k=5):
+    def search(self, query, top_k=3):
         q_emb = self.model.encode([query], convert_to_numpy=True)
         faiss.normalize_L2(q_emb)
+
         D, I = self.index.search(q_emb, top_k)
+
         results = []
-        df = pd.read_csv(self.csv_path, encoding="utf-8")
+
         for score, idx in zip(D[0], I[0]):
             if idx < 0:
                 continue
-            row = df.iloc[idx].to_dict()
+
+            row = self.df.iloc[idx].to_dict()
+
+            # Short clean passage
+            text = " ".join([
+                str(row.get("scheme_name", "")),
+                str(row.get("details", ""))[:350],
+                str(row.get("benefits", ""))[:200],
+                str(row.get("eligibility", ""))[:200]
+            ])
+
             results.append({
                 "score": float(score),
-                "text": " || ".join([str(v) for v in row.values() if v]),
+                "text": text.strip(),
                 "row": row
             })
+
         return results

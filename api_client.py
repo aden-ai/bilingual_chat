@@ -1,35 +1,30 @@
-import subprocess
-import shlex
+import requests
+import json
 
 def call_ollama(prompt: str) -> str:
     """
-    Call Ollama CLI safely using subprocess.
+    Calls Ollama using the HTTP API (most stable method on Windows).
     """
     try:
-        # Properly quote the prompt for command line
-        cmd = ["ollama", "run", "qwen3:8b", prompt]
+        url = "http://localhost:11434/api/generate"
+        payload = {
+            "model": "qwen2.5:3b",
+            "prompt": prompt,
+            "stream": False
+        }
 
-        # Use shlex.quote for safety if needed
-        cmd_str = " ".join([shlex.quote(c) for c in cmd])
-        print("Running command:", cmd_str)
+        response = requests.post(url, json=payload, timeout=120)
 
-        result = subprocess.run(
-            cmd_str,
-            capture_output=True,
-            text=True,
-            shell=True,  # must be True if passing as single string
-            timeout=120  # prevent infinite hang
-        )
+        if response.status_code != 200:
+            print("Ollama HTTP error:", response.text)
+            return "Error: Ollama call failed."
 
-        output = result.stdout.strip()
-        print("Ollama output preview:", output[:300])
-        return output
+        data = response.json()
+        return data.get("response", "").strip()
 
-    except subprocess.TimeoutExpired:
+    except requests.exceptions.Timeout:
         return "Error: Ollama request timed out."
-    except subprocess.CalledProcessError as e:
-        print("Ollama CLI error:", e.stderr)
-        return "Error: Could not generate response from Ollama."
-    except UnicodeDecodeError as e:
-        print("Unicode decoding error:", e)
-        return "Error: Unicode decoding issue with Ollama output."
+
+    except Exception as e:
+        print("Ollama HTTP exception:", e)
+        return "Error: Ollama call failed."

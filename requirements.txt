@@ -14,3 +14,4 @@ faiss-cpu>=1.7.4
 tqdm>=4.66.0
 langdetect>=1.0.9
 googletrans==4.0.0-rc1
+deep-translator
